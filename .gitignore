@@ -1,0 +1,6 @@
+venv/
+output/
+.DS_Store
+*.avi
+results/
+recordings/
