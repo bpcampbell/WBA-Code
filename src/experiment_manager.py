@@ -33,7 +33,7 @@ class ExperimentManager:
         
     def run_experiment(self, experiment_name, gain_cycle):
         """Run experiment with given gain cycle."""
-        # Start analyzer process
+        logger.info("Starting analyzer process...")
         self.analyzer.start()
         
         exp_start_time = time.perf_counter()
@@ -48,8 +48,9 @@ class ExperimentManager:
                 while time.perf_counter() - cycle_start_time < duration:
                     try:
                         self.wing_beat_amplitude = self.wingbeat_queue.get_nowait()
-                        logger.debug(f"Current wingbeat amplitude: {self.wing_beat_amplitude}")
+                        logger.info(f"Got wingbeat amplitude: {self.wing_beat_amplitude:.2f}")
                     except Empty:
+                        logger.debug("No new wingbeat data available")
                         pass
                     
                     current_time = time.perf_counter() - exp_start_time
@@ -60,14 +61,17 @@ class ExperimentManager:
                     
                     if gain > 0:
                         pattern = self.flow_generator.generate_pattern(self.cumulative_phase)
+                        logger.debug(f"Generated pattern with phase: {self.cumulative_phase:.2f}")
                     else:
+                        logger.info('No gain, setting pattern to zero')
                         pattern = np.zeros((self.frame_size[0], self.frame_size[1], 3), dtype=np.uint8)
                     
                     # Display pattern
                     cv2.imshow('Optic Flow', pattern)
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        return data
-                    
+
+                    # Info log new pattern
+                    logger.info(f"New pattern generated with phase: {self.cumulative_phase:.2f}")
+
                     data.append([current_time, self.wing_beat_amplitude, speed])
                     last_time = time.perf_counter()
                     
