@@ -23,37 +23,26 @@ def main():
         if not video_path.exists():
             raise FileNotFoundError(f"Test video not found: {video_path}")
         
-        # Setup display window for optic flow
-        cv2.namedWindow("Optic Flow", cv2.WND_PROP_FULLSCREEN)
-        cv2.setWindowProperty("Optic Flow", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-        
         # Define experiment parameters
         frame_size = (800, 800)  # Adjust as needed for your display
         experiment_name = "realtime_test"
         
         # Define gain cycle: (duration in seconds, gain)
         gain_cycle = [
-            (10, 25),   # High gain for 10s
-            (10, 0),    # No stimulus for 10s
-            (10, 12.5), # Medium gain for 10s
-            (10, 0)     # No stimulus for 10s
+            (10, 50),    # Higher gain for more noticeable movement
+            (10, 0),     # No stimulus
+            (10, 25),    # Medium gain
+            (10, 0)      # No stimulus
         ]
         
         logger.info("Initializing experiment...")
         experiment = ExperimentManager(
             frame_size=frame_size,
-            video_path=video_path,  # Pass video path
+            video_path=video_path,
             min_amplitude=30,
             max_amplitude=120
         )
         
-        # Countdown before starting
-        logger.info("Starting experiment in:")
-        for i in range(3, 0, -1):
-            logger.info(f"{i}...")
-            time.sleep(1)
-            
-        logger.info("Running experiment...")
         # Run experiment and collect data
         data = experiment.run_experiment(experiment_name, gain_cycle)
         

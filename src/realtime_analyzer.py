@@ -6,9 +6,10 @@ from src.config import CONFIG
 import logging
 
 class RealTimeWingbeatAnalyzer(Process):
-    def __init__(self, output_queue: Queue, video_path: str):
+    def __init__(self, output_queue: Queue, ready_queue: Queue, video_path: str):
         super().__init__()
         self.output_queue = output_queue
+        self.ready_queue = ready_queue
         self.video_path = video_path
         self.running = True
         self.logger = logging.getLogger(__name__)
@@ -38,6 +39,9 @@ class RealTimeWingbeatAnalyzer(Process):
             analyzer.setup_points_ui(frame)
             self.logger.info("Points setup complete")
             
+            # Signal that points are selected and analyzer is ready
+            self.ready_queue.put(True)
+            
             # Main processing loop
             while self.running:
                 ret, frame = cap.read()
@@ -62,14 +66,9 @@ class RealTimeWingbeatAnalyzer(Process):
                     except Empty:
                         pass
                         
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    self.logger.info("Quit signal received")
-                    break
-                    
         finally:
             self.logger.info(f"Processed {frame_count} frames")
             cap.release()
-            cv2.destroyAllWindows()
             
     def stop(self):
         """Stop the analyzer process"""

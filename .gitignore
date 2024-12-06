@@ -4,3 +4,9 @@ output/
 *.avi
 results/
 recordings/
+**/*.pyc
+
+# Hide all pyc files
+**/*.pyc
+# Hide pycache files
+__pycache__/

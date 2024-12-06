@@ -196,14 +196,18 @@ class WingbeatAnalyzer:
         
         cv2.namedWindow("FrameClick")
         cv2.setMouseCallback("FrameClick", self.mouse_callback)
-        cv2.imshow("FrameClick", frame)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
         
-        if self.click_count < 5:
-            raise RuntimeError(f"Not all points were selected. Only got {self.click_count} points, need 5.")
-            
+        # Keep showing frame until all points are selected
+        while self.click_count < 5:
+            cv2.imshow("FrameClick", frame)
+            cv2.pollKey()
+        
+        # Immediately destroy window after last point
+        cv2.destroyWindow("FrameClick")
+        cv2.waitKey(1)  # Force window destruction
+        
         self.initialize_processing(frame)
+        logger.info("Point selection and initialization complete")
 
 
 def process_left_region(left_ROI: np.ndarray, 
@@ -354,7 +358,7 @@ def run_analysis(video_path: str, output_dir: Path, make_video: bool = False) ->
                 video_handler.write_frame(cropped_frame)  # Write cropped frame instead of original
             
             # Check for quit
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            if cv2.pollKey() & 0xFF == ord('q'):
                 logger.info("User requested stop")
                 break
                 
