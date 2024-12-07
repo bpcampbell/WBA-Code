@@ -31,8 +31,6 @@ def main():
         gain_cycle = [
             (10, 50),    # Higher gain for more noticeable movement
             (10, 0),     # No stimulus
-            (10, 25),    # Medium gain
-            (10, 0)      # No stimulus
         ]
         
         logger.info("Initializing experiment...")

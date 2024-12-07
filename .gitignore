@@ -10,3 +10,4 @@ recordings/
 **/*.pyc
 # Hide pycache files
 __pycache__/
+*.pyc

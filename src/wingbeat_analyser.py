@@ -8,6 +8,9 @@ from src.video_handler import VideoHandler
 from src.data_manager import DataManager
 from src.config import CONFIG
 from datetime import datetime
+import customtkinter as ctk
+from PIL import Image, ImageTk
+from src.point_selector import PointSelector
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,6 +25,7 @@ class WingbeatAnalyzer:
         self.click_count = 0
         self.setup_masks()
         self.setup_points()
+        self.last_cropped_frame = None
         
     def setup_masks(self):
         """Initialize mask parameters"""
@@ -41,19 +45,51 @@ class WingbeatAnalyzer:
     def initialize_processing(self, frame):
         """Initialize processing parameters from first frame"""
         central_point = (self.points['x0'], self.points['y0'])
-        region_point = (self.points['x2'], self.points['y2'])
-        left_point = (self.points['x3'], self.points['y3'])
-        right_point = (self.points['x4'], self.points['y4'])
+        head_point = (self.points['x1'], self.points['y1'])
+        wing_point = (self.points['x2'], self.points['y2'])
+        left_hinge = (self.points['x3'], self.points['y3'])
+        right_hinge = (self.points['x4'], self.points['y4'])
         
         # Calculate distance and square region
-        self.distance = int(np.sqrt((region_point[0] - central_point[0]) ** 2 + 
-                                  (region_point[1] - central_point[1]) ** 2))
+        self.distance = int(np.sqrt((wing_point[0] - central_point[0]) ** 2 + 
+                                  (wing_point[1] - central_point[1]) ** 2))
         self.square_size = 2 * self.distance
         
-        # Calculate new points
-        self._calculate_transformed_points(central_point, left_point, right_point)
+        # Convert frame to grayscale if needed
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if len(frame.shape) > 2 else frame
         
-        # Initialize masks
+        # Sample regions around points
+        region_size = 5  # Size of sampling region
+        
+        # Sample body region (center and head)
+        body_samples = []
+        for point in [central_point, head_point]:
+            x, y = point
+            region = gray[y-region_size:y+region_size, x-region_size:x+region_size]
+            body_samples.extend(region.flatten())
+        body_mean = np.mean(body_samples)
+        body_std = np.std(body_samples)
+        
+        # Sample wing regions (wing point and hinges)
+        wing_samples = []
+        for point in [wing_point, left_hinge, right_hinge]:
+            x, y = point
+            region = gray[y-region_size:y+region_size, x-region_size:x+region_size]
+            wing_samples.extend(region.flatten())
+        wing_mean = np.mean(wing_samples)
+        wing_std = np.std(wing_samples)
+        
+        # Update thresholds based on sampled values
+        self.config['intensity_thresholds'] = {
+            'body': max(body_mean - body_std, wing_mean + wing_std),  # Body threshold
+            'wing_min': max(10, wing_mean - wing_std),  # Lower wing bound
+            'wing_max': min(wing_mean + wing_std, body_mean - body_std)  # Upper wing bound
+        }
+        
+        logger.info(f"Calculated thresholds: {self.config['intensity_thresholds']}")
+        
+        # Continue with point transformation and mask initialization
+        self._calculate_transformed_points(central_point, left_hinge, right_hinge)
         self._initialize_masks(frame)
         
     def _calculate_transformed_points(self, central_point, left_point, right_point):
@@ -112,41 +148,38 @@ class WingbeatAnalyzer:
         
     def apply_masks(self, frame):
         """Apply binary and radius masks"""
-        # Reuse pre-allocated array for binary threshold
-        cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY, self.binary_frame)
-        cv2.threshold(self.binary_frame, self.config['threshold'], 255, cv2.THRESH_BINARY, self.binary_frame)
+        # Convert to grayscale if not already
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if len(frame.shape) > 2 else frame
         
         # Use in-place operations
-        cv2.bitwise_and(self.binary_frame, self.binary_frame, dst=self.temp_roi, mask=cv2.bitwise_not(self.mask))
-        cv2.bitwise_and(self.temp_roi, self.temp_roi, dst=self.binary_frame, mask=self.mask2)
-        
-        # Apply erosion and dilation in-place
-        kernel = np.ones(self.config['kernel_size'], np.uint8)
-        cv2.dilate(self.binary_frame, kernel, dst=self.temp_roi, 
-                   iterations=self.config['dilation_iterations'])
-        cv2.erode(self.temp_roi, kernel, dst=self.binary_frame, 
-                  iterations=self.config['erosion_iterations'])
+        cv2.bitwise_and(gray, gray, dst=self.temp_roi, mask=cv2.bitwise_not(self.mask))
+        cv2.bitwise_and(self.temp_roi, self.temp_roi, dst=gray, mask=self.mask2)
         
         # Return views instead of copies for ROIs
-        left_ROI = self.binary_frame[:, :self.mask_x1]
-        right_ROI = self.binary_frame[:, self.mask_x2:]
+        left_ROI = gray[:, :self.mask_x1]
+        right_ROI = gray[:, self.mask_x2:]
         
         return left_ROI, right_ROI
         
     def analyze_wings(self, rois):
         """Analyze left and right wing regions"""
         left_ROI, right_ROI = rois
-        left_data = process_left_region(
-            left_ROI=left_ROI,
-            central_point_new=self.central_point_new,
-            left_point_new=self.left_point_new
+        
+        # Process left wing
+        left_data = process_wing_region(
+            roi=left_ROI,
+            hinge_point=self.left_point_new,
+            is_right_wing=False
         )
-        right_data = process_right_region(
-            right_ROI=right_ROI,
-            central_point_new=self.central_point_new,
-            right_point_new=self.right_point_new,
-            mask_x2=self.mask_x2
+        
+        # Process right wing
+        right_data = process_wing_region(
+            roi=right_ROI,
+            hinge_point=self.right_point_new,
+            is_right_wing=True,
+            mask_offset=self.mask_x2
         )
+        
         return left_data, right_data
         
     def calculate_angles(self, left_data, right_data):
@@ -154,7 +187,8 @@ class WingbeatAnalyzer:
         left_angle, left_min_point, left_area = left_data
         right_angle, right_min_point, right_area = right_data
         
-        if left_angle < self.config['min_angle_threshold'] or right_angle < self.config['min_angle_threshold']:
+        if left_angle < self.config['wingbeat']['min_angle_threshold'] or \
+           right_angle < self.config['wingbeat']['min_angle_threshold']:
             delta_angle_rl = 0
         else:
             delta_angle_rl = right_angle - left_angle
@@ -169,118 +203,114 @@ class WingbeatAnalyzer:
         
     def process_frame(self, frame):
         """Main frame processing method"""
-        cropped_frame = self.crop_frame(frame)
-        processed_frame = self.apply_masks(cropped_frame)
+        self.last_cropped_frame = self.crop_frame(frame)
+        processed_frame = self.apply_masks(self.last_cropped_frame)
         left_data, right_data = self.analyze_wings(processed_frame)
-        return self.calculate_angles(left_data, right_data)
+        results = self.calculate_angles(left_data, right_data)
         
-    def mouse_callback(self, event, x, y, flags, param):
-        if event == cv2.EVENT_LBUTTONDOWN:
-            # Get the point number based on click count
-            point_num = self.click_count
-            if point_num < 5:  # We need 5 points total
-                # Set both x and y coordinates at once
-                self.points[f'x{point_num}'] = x
-                self.points[f'y{point_num}'] = y
-                logger.info(f"Point {point_num} set to: ({x}, {y})")
-                self.click_count += 1
+        # Draw only wing lines on the cropped frame
+        if results['left_angle'] >= self.config['wingbeat']['min_angle_threshold'] and \
+           results['right_angle'] >= self.config['wingbeat']['min_angle_threshold']:
+            # Draw left wing line
+            cv2.line(self.last_cropped_frame,
+                    self.left_point_new,
+                    results['left_point'],
+                    self.config['wingbeat']['line_color'],
+                    self.config['wingbeat']['line_thickness'])
+            
+            # Draw right wing line
+            cv2.line(self.last_cropped_frame,
+                    self.right_point_new,
+                    results['right_point'],
+                    self.config['wingbeat']['line_color'],
+                    self.config['wingbeat']['line_thickness'])
+        
+        return results
+        
+    def get_last_cropped_frame(self):
+        """Return the last cropped frame"""
+        return self.last_cropped_frame
 
-    def setup_points_ui(self, frame):
+    def setup_points_ui(self, frames):
         """Setup UI for point selection"""
-        logger.info("Please select 5 points in order:")
-        logger.info("1. Centre of the body")
-        logger.info("2. Centre of the head")
-        logger.info("3. Point to track on the wing")
-        logger.info("4. Left wing hinge")
-        logger.info("5. Right wing hinge")
-        
-        cv2.namedWindow("FrameClick")
-        cv2.setMouseCallback("FrameClick", self.mouse_callback)
-        
-        # Keep showing frame until all points are selected
-        while self.click_count < 5:
-            cv2.imshow("FrameClick", frame)
-            cv2.pollKey()
-        
-        # Immediately destroy window after last point
-        cv2.destroyWindow("FrameClick")
-        cv2.waitKey(1)  # Force window destruction
-        
-        self.initialize_processing(frame)
-        logger.info("Point selection and initialization complete")
+        selector = PointSelector(frames)
+        points = selector.get_points()
+        if points is None:
+            return False
+        self.points = points
+        self.initialize_processing(frames[0])
+        return True
 
-
-def process_left_region(left_ROI: np.ndarray, 
-                       central_point_new: Tuple[int, int], 
-                       left_point_new: Tuple[int, int]) -> Tuple[float, Tuple[int, int], float]:
-    """Process the left wing region to calculate angle and area."""
-    contours, _ = cv2.findContours(left_ROI, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+def process_wing_region(roi, hinge_point, is_right_wing=False, mask_offset=0):
+    """Process wing region to calculate angle and area."""
+    # Create mask for wing intensity range
+    wing_mask = cv2.inRange(
+        roi, 
+        CONFIG['intensity_thresholds']['wing_min'],
+        CONFIG['intensity_thresholds']['wing_max']
+    )
+    
+    # Apply morphological operations
+    kernel = np.ones(CONFIG['wingbeat']['kernel_size'], np.uint8)
+    
+    # First dilate to connect wing regions
+    wing_mask = cv2.dilate(
+        wing_mask, 
+        kernel, 
+        iterations=CONFIG['wingbeat']['dilation_iterations']
+    )
+    
+    # Then erode to clean up noise
+    wing_mask = cv2.erode(
+        wing_mask, 
+        kernel, 
+        iterations=CONFIG['wingbeat']['erosion_iterations']
+    )
+    
+    # Find contours in processed mask
+    contours, _ = cv2.findContours(wing_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
-        return 0, central_point_new, 0
-        
-    # Use array operations instead of max()
+        return 0, hinge_point, 0
+    
+    # Get largest contour
     areas = np.array([cv2.contourArea(c) for c in contours])
     max_idx = np.argmax(areas)
     max_contour = contours[max_idx]
+    max_area = areas[max_idx]
     
-    # Draw contour directly to ROI
-    cv2.drawContours(left_ROI, [max_contour], -1, 255, thickness=cv2.FILLED)
+    # Check if contour area is too small
+    if max_area < CONFIG['wingbeat']['min_contour_area']:
+        return 0, hinge_point, 0
     
-    # Use numpy operations for point finding
-    points = np.where(left_ROI == 255)
-    min_y_idx = np.argmin(points[0])
-    left_min_point = (points[1][min_y_idx], points[0][min_y_idx])
+    # Find highest point (minimum y)
+    min_y = float('inf')
+    wing_tip = None
     
-    # Vectorized angle calculation
-    delta = np.array([left_point_new[0] - left_min_point[0],
-                     left_point_new[1] - left_min_point[1]])
-    left_angle = 180 - np.degrees(np.arctan2(delta[0], delta[1]))
+    for point in max_contour[:, 0, :]:
+        if point[1] < min_y:  # Lower y is higher in image
+            min_y = point[1]
+            # Apply offset for right wing
+            x_coord = point[0] + mask_offset if is_right_wing else point[0]
+            wing_tip = (x_coord, point[1])
+            
+    if wing_tip is None:
+        return 0, hinge_point, 0
     
-    return left_angle, left_min_point, areas[max_idx]
-
-
-def process_right_region(right_ROI: np.ndarray, 
-                        central_point_new: Tuple[int, int], 
-                        right_point_new: Tuple[int, int], 
-                        mask_x2: int) -> Tuple[float, Tuple[int, int], float]:
-    """Process the right wing region to calculate angle and area."""
-    right_contours, _ = cv2.findContours(right_ROI, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if len(right_contours) == 0:
-        right_angle = 0
-        right_min_point = central_point_new
-        right_area = 0
+    # Calculate angle
+    if is_right_wing:
+        delta = np.array([
+            wing_tip[0] - hinge_point[0],
+            hinge_point[1] - wing_tip[1]
+        ])
     else:
-        right_max_contour = max(right_contours, key=cv2.contourArea)
-        right_area = cv2.contourArea(right_max_contour)
-        new_right_ROI = np.zeros_like(right_ROI)
-        cv2.drawContours(new_right_ROI, [right_max_contour], -1, 255, thickness=cv2.FILLED)
-
-        right_y, right_x = np.where(new_right_ROI == 255)
-        right_min_y_index = np.argmin(right_y)
-        right_min_y_coord = (right_x[right_min_y_index], right_y[right_min_y_index])
-        right_min_point = (right_min_y_coord[0] + mask_x2, right_min_y_coord[1])
-        right_delta_x = right_min_point[0] - right_point_new[0]
-        right_delta_y = right_point_new[1] - right_min_point[1]
-        right_angle = 180 - np.degrees(np.arctan2(right_delta_x, right_delta_y))
-
-    return right_angle, right_min_point, right_area
-
-
-def process_frame(frame, left_ROI, right_ROI):
-    """Process a single frame to get wing angles and points."""
-    # Process left region
-    left_angle, left_min_point, left_area = process_left_region(frame)
+        delta = np.array([
+            hinge_point[0] - wing_tip[0],
+            hinge_point[1] - wing_tip[1]
+        ])
     
-    # Process right region
-    right_angle, right_min_point, right_area = process_right_region(frame)
+    angle = 180 - np.degrees(np.arctan2(delta[0], delta[1]))
     
-    # Calculate wing beat amplitude difference (dWBA)
-    if left_angle < 50 or right_angle < 50:
-        delta_angle_rl = 0
-    else:
-        delta_angle_rl = right_angle - left_angle
-        
-    return left_angle, right_angle, delta_angle_rl, left_min_point, right_min_point
+    return angle, wing_tip, max_area
 
 
 def run_analysis(video_path: str, output_dir: Path, make_video: bool = False) -> None:
@@ -357,10 +387,6 @@ def run_analysis(video_path: str, output_dir: Path, make_video: bool = False) ->
                 
                 video_handler.write_frame(cropped_frame)  # Write cropped frame instead of original
             
-            # Check for quit
-            if cv2.pollKey() & 0xFF == ord('q'):
-                logger.info("User requested stop")
-                break
                 
     except Exception as e:
         logger.error(f"Error during analysis: {str(e)}")
@@ -373,7 +399,6 @@ def run_analysis(video_path: str, output_dir: Path, make_video: bool = False) ->
         cv2.destroyAllWindows()
         
         logger.info(f"Analysis complete. Processed {frame_count} frames")
-
 
 def main():
     """Main entry point"""
@@ -392,7 +417,6 @@ def main():
         return 1
         
     return 0
-
 
 if __name__ == '__main__':
     exit(main())

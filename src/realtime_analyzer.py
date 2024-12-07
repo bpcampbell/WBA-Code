@@ -4,6 +4,10 @@ import cv2
 from src.wingbeat_analyser import WingbeatAnalyzer
 from src.config import CONFIG
 import logging
+import time
+from datetime import datetime
+from pathlib import Path
+from src.video_handler import VideoHandler
 
 class RealTimeWingbeatAnalyzer(Process):
     def __init__(self, output_queue: Queue, ready_queue: Queue, video_path: str):
@@ -18,25 +22,48 @@ class RealTimeWingbeatAnalyzer(Process):
         """Main process loop"""
         self.logger.info("Starting RealTimeWingbeatAnalyzer process")
         
-        # Initialize video
-        cap = cv2.VideoCapture(str(self.video_path))
-        if not cap.isOpened():
-            raise RuntimeError(f"Failed to open video: {self.video_path}")
-            
-        self.logger.info("Successfully opened video file")
-        
-        # Initialize analyzer
-        analyzer = WingbeatAnalyzer(CONFIG)
-        frame_count = 0
-        
         try:
-            # Get first frame for setup
-            ret, frame = cap.read()
-            if not ret:
-                raise RuntimeError("Failed to read first frame")
+            # Initialize video capture
+            cap = cv2.VideoCapture(str(self.video_path))
+            if not cap.isOpened():
+                raise RuntimeError(f"Failed to open video: {self.video_path}")
+            
+            # Initialize video writer
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_video_path = Path("output") / f"wing_analysis_{timestamp}.mp4"
+            video_handler = VideoHandler(
+                source_path=self.video_path,
+                output_path=output_video_path,
+                make_video=True
+            )
                 
-            # Setup points through UI
-            analyzer.setup_points_ui(frame)
+            self.logger.info("Successfully opened video file")
+            
+            # Initialize analyzer
+            analyzer = WingbeatAnalyzer(CONFIG)
+            frame_count = 0
+            
+            # Buffer first 10 frames for setup
+            initial_frames = []
+            for _ in range(10):
+                ret, frame = cap.read()
+                if not ret:
+                    raise RuntimeError("Failed to read initial frames")
+                initial_frames.append(frame)
+                
+            # Setup points through UI using averaged frame
+            try:
+                if not analyzer.setup_points_ui(initial_frames):
+                    self.logger.info("Point selection cancelled by user")
+                    self.ready_queue.put(False)  # Signal that setup failed
+                    return
+                # Add a small delay to ensure window cleanup
+                time.sleep(0.2)  # 200ms delay
+            except Exception as e:
+                self.logger.error(f"Point selection failed: {str(e)}")
+                self.ready_queue.put(False)
+                return
+            
             self.logger.info("Points setup complete")
             
             # Signal that points are selected and analyzer is ready
@@ -53,13 +80,17 @@ class RealTimeWingbeatAnalyzer(Process):
                 # Process frame
                 results = analyzer.process_frame(frame)
                 
+                # Write the cropped frame to video
+                cropped_frame = analyzer.get_last_cropped_frame()
+                if cropped_frame is not None:
+                    video_handler.write_frame(cropped_frame)
+                
                 # Put latest wingbeat amplitude in queue (non-blocking)
                 try:
                     self.output_queue.put_nowait(results['delta_angle'])
-                    if frame_count % 30 == 0:  # Log every 30 frames
+                    if frame_count % 30 == 0:
                         self.logger.info(f"Frame {frame_count}: delta_angle = {results['delta_angle']:.2f}")
                 except Full:
-                    self.logger.debug("Queue full, updating with new value")
                     try:
                         self.output_queue.get_nowait()
                         self.output_queue.put_nowait(results['delta_angle'])
@@ -69,6 +100,8 @@ class RealTimeWingbeatAnalyzer(Process):
         finally:
             self.logger.info(f"Processed {frame_count} frames")
             cap.release()
+            if 'video_handler' in locals():
+                video_handler.release()
             
     def stop(self):
         """Stop the analyzer process"""

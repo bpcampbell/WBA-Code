@@ -1,3 +1,4 @@
+from vidgear.gears import WriteGear
 import cv2
 import logging
 from pathlib import Path
@@ -40,35 +41,37 @@ class VideoHandler:
             self.setup_video_writer()
             
     def setup_video_writer(self):
-        """Initialize video writer with source video properties"""
+        """Initialize WriteGear writer with optimized settings"""
         if not self.output_path:
             raise ValueError("Output path not specified for video recording")
             
-        fourcc = cv2.VideoWriter_fourcc(*"avc1")
-        self.writer = cv2.VideoWriter(
-            str(self.output_path),
-            fourcc,
-            self.fps,
-            (self.output_width, self.output_height)
+        # Define output parameters for WriteGear
+        output_params = {
+            "-input_framerate": self.fps,
+            "-c:v": "libx264",  # Use H.264 codec
+            "-crf": 17,  # Constant Rate Factor (0-51, lower means better quality)
+            "-preset": "fast",  # Encoding speed preset
+            "-tune": "zerolatency",  # Optimize for low-latency streaming
+            "-color_range": 2,  # Full color range
+            "-pix_fmt": "yuv420p"  # Pixel format for better compatibility
+        }
+        
+        self.writer = WriteGear(
+            output=str(self.output_path),
+            compression_mode=True,
+            logging=False,  # Changed from True to False to disable logging
+            **output_params
         )
         
     def read_frame(self):
-        """Read and return a frame from the video source.
-        
-        Returns:
-            numpy.ndarray: Video frame or None if no frames left
-        """
+        """Read and return a frame from the video source."""
         ret, frame = self.cap.read()
         if not ret:
             return None
         return frame
         
     def write_frame(self, frame):
-        """Write frame to output video if enabled.
-        
-        Args:
-            frame: Video frame to write
-        """
+        """Write frame using WriteGear if enabled."""
         if self.make_video and self.writer:
             self.writer.write(frame)
             
@@ -76,12 +79,12 @@ class VideoHandler:
         """Release video capture and writer resources"""
         self.cap.release()
         if self.writer:
-            self.writer.release()
+            self.writer.close()  # WriteGear uses close() instead of release()
             
     def update_frame_size(self, frame_size):
         """Update the output frame size and reinitialize writer if needed."""
         self.output_width, self.output_height = frame_size
         if self.make_video:
             if self.writer is not None:
-                self.writer.release()
+                self.writer.close()
             self.setup_video_writer()

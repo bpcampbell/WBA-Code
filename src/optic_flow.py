@@ -1,11 +1,12 @@
 import cv2
 import numpy as np
+from src.config import CONFIG
 
 class OpticFlowGenerator:
-    def __init__(self, frame_size, wavelength=100, amplitude=255):
+    def __init__(self, frame_size, wavelength=50, amplitude=255):
         self.frame_size = frame_size
-        self.wavelength = wavelength
-        self.amplitude = amplitude
+        self.wavelength = CONFIG['optic_flow'].get('wavelength', wavelength)
+        self.amplitude = CONFIG['optic_flow'].get('amplitude', amplitude)
         
         # Pre-calculate static components
         self.x, self.y = np.meshgrid(np.arange(frame_size[1]), np.arange(frame_size[0]))
