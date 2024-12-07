@@ -11,3 +11,11 @@ recordings/
 # Hide pycache files
 __pycache__/
 *.pyc
+# Python bytecode files
+*.pyc
+*$py.class
+# Python cache directories
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+**/__pycache__/

@@ -8,14 +8,19 @@ logger = logging.getLogger(__name__)
 
 class DataManager:
     def __init__(self, output_path):
-        """Initialize data manager.
-        
-        Args:
-            output_path: Path to output CSV file (already includes timestamp)
-        """
+        """Initialize data manager."""
         self.output_path = Path(output_path)
-        self.fieldnames = ['left_angle', 'right_angle', 'delta_angle', 
-                          'time', 'frame']
+        # Update fieldnames to match what we actually want to save
+        self.fieldnames = [
+            'time',
+            'left_angle',
+            'right_angle', 
+            'delta_angle',
+            'frame',
+            'phase',
+            'speed',
+            'gain'
+        ]
         self.start_time = None
         self.first_timestamp = None
         self.csv_file = None
@@ -37,34 +42,31 @@ class DataManager:
         logger.info(f"Initialized data recording to: {self.output_path}")
         
     def write_row(self, data):
-        """Write a row of data to CSV.
-        
-        Args:
-            data: Dictionary containing wing analysis results
-        """
+        """Write a row of data to CSV."""
         if not self.writer:
             raise RuntimeError("CSV writer not initialized")
             
-        # Calculate current time in milliseconds
-        current_time = perf_counter_ns() / 1_000_000  # Current time in ms
+        current_time = perf_counter_ns() / 1_000_000  
         
-        # Store first timestamp if not set
         if self.first_timestamp is None:
             self.first_timestamp = current_time
             
-        # Calculate elapsed time relative to first timestamp
         elapsed_time = current_time - self.first_timestamp
         
+        # Ensure all required fields are present with default values if needed
         row_data = {
-            'left_angle': data['left_angle'],
-            'right_angle': data['right_angle'],
-            'delta_angle': data['delta_angle'],
             'time': elapsed_time,
-            'frame': data.get('frame', 0)
+            'left_angle': data.get('left_angle', 0),
+            'right_angle': data.get('right_angle', 0),
+            'delta_angle': data.get('delta_angle', 0),
+            'frame': data.get('frame', 0),
+            'phase': data.get('phase', 0),
+            'speed': data.get('speed', 0),
+            'gain': data.get('gain', 0)
         }
         
         self.writer.writerow(row_data)
-        self.csv_file.flush()
+        self.csv_file.flush()  # Ensure data is written immediately
         
     def close(self):
         """Close the CSV file"""

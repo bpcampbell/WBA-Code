@@ -1,10 +1,15 @@
 - [x] Windows in right order
-- [ ] Speed scaling
-- [ ] Data input at beginning for experiment params
+- [x] Speed scaling
+- [x] Data input at beginning for experiment params
 - [x] Video writing
-- [ ] Notes for experiments save files
-- [ ] Some kind of text file that has all the notes for each experiment
-- [ ] Recording phase
-- [ ] Put everything into config and append to the end of text file
-- [ ] Including gain cycle durations and been able to set that in the text file
-- [ ] Optimise for realtime speed
+- [x] Notes for experiments save files
+- [x] Some kind of text file that has all the notes for each experiment
+- [x] Recording phase
+- [x] Put everything into config and append to the end of text file
+- [x] Including gain cycle durations and been able to set that in the text file
+- [x] Optimise for realtime speed
+    - [x] Pre-calculate all static components
+    - [x] Use pre-calculated terms for faster computation
+    - [x] Avoid unnecessary array creation
+    - [x] Use numpy for faster operations
+    - [ ] Running at 50hz on my machine with non optimized pollkey need to test on windows

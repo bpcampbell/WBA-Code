@@ -23,36 +23,45 @@ def main():
         if not video_path.exists():
             raise FileNotFoundError(f"Test video not found: {video_path}")
         
-        # Define experiment parameters
-        frame_size = (800, 800)  # Adjust as needed for your display
-        experiment_name = "realtime_test"
-        
-        # Define gain cycle: (duration in seconds, gain)
-        gain_cycle = [
-            (10, 50),    # Higher gain for more noticeable movement
-            (10, 0),     # No stimulus
-        ]
+        # Get parameters from config
+        experiment_config = CONFIG['experiment']
+        frame_size = experiment_config['frame_size']
+        gain_cycle = [(cycle['duration'], cycle['gain']) 
+                      for cycle in experiment_config['gain_cycle']]
         
         logger.info("Initializing experiment...")
         experiment = ExperimentManager(
             frame_size=frame_size,
             video_path=video_path,
-            min_amplitude=30,
-            max_amplitude=120
+            min_amplitude=experiment_config['min_amplitude'],
+            max_amplitude=experiment_config['max_amplitude']
         )
         
         # Run experiment and collect data
-        data = experiment.run_experiment(experiment_name, gain_cycle)
+        result = experiment.run_experiment(experiment_config['name'], gain_cycle)
+        if result is None or result[0] is None:  # Check both data and timestamp
+            logger.info("Experiment cancelled or failed")
+            return 1
+            
+        data, timestamp = result
         
         # Save data
         output_dir = Path(__file__).parent / "output"
         output_dir.mkdir(exist_ok=True)
         
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
         output_file = output_dir / f"experiment_data_{timestamp}.csv"
         
         import pandas as pd
-        df = pd.DataFrame(data, columns=['Time', 'Wingbeat Amplitude', 'Speed'])
+        df = pd.DataFrame(data, columns=[
+           'time',
+            'left_angle',
+            'right_angle', 
+            'delta_angle',
+            'frame',
+            'phase',
+            'speed',
+            'gain'
+        ])
         df.to_csv(output_file, index=False)
         
         logger.info(f"Data saved to: {output_file}")

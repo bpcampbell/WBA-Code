@@ -8,19 +8,26 @@ import time
 from datetime import datetime
 from pathlib import Path
 from src.video_handler import VideoHandler
+import numpy as np
 
 class RealTimeWingbeatAnalyzer(Process):
-    def __init__(self, output_queue: Queue, ready_queue: Queue, video_path: str):
+    def __init__(self, output_queue: Queue, ready_queue: Queue, video_path: str, points: dict):
         super().__init__()
         self.output_queue = output_queue
         self.ready_queue = ready_queue
         self.video_path = video_path
+        self.points = points
         self.running = True
         self.logger = logging.getLogger(__name__)
         
     def run(self):
         """Main process loop"""
         self.logger.info("Starting RealTimeWingbeatAnalyzer process")
+        frame_count = 0  # Initialize frame_count at the start
+        
+        # Add frequency tracking
+        frame_times = []
+        last_frame_time = time.perf_counter()
         
         try:
             # Initialize video capture
@@ -37,36 +44,15 @@ class RealTimeWingbeatAnalyzer(Process):
                 make_video=True
             )
                 
-            self.logger.info("Successfully opened video file")
-            
-            # Initialize analyzer
+            # Initialize analyzer with provided points
             analyzer = WingbeatAnalyzer(CONFIG)
-            frame_count = 0
+            analyzer.points = self.points  # Set points directly
+            first_frame = video_handler.read_frame()
+            if first_frame is None:
+                raise RuntimeError("Failed to read first frame")
+            analyzer.initialize_processing(first_frame)
             
-            # Buffer first 10 frames for setup
-            initial_frames = []
-            for _ in range(10):
-                ret, frame = cap.read()
-                if not ret:
-                    raise RuntimeError("Failed to read initial frames")
-                initial_frames.append(frame)
-                
-            # Setup points through UI using averaged frame
-            try:
-                if not analyzer.setup_points_ui(initial_frames):
-                    self.logger.info("Point selection cancelled by user")
-                    self.ready_queue.put(False)  # Signal that setup failed
-                    return
-                # Add a small delay to ensure window cleanup
-                time.sleep(0.2)  # 200ms delay
-            except Exception as e:
-                self.logger.error(f"Point selection failed: {str(e)}")
-                self.ready_queue.put(False)
-                return
-            
-            self.logger.info("Points setup complete")
-            
-            # Signal that points are selected and analyzer is ready
+            # Signal that analyzer is ready
             self.ready_queue.put(True)
             
             # Main processing loop
@@ -77,28 +63,53 @@ class RealTimeWingbeatAnalyzer(Process):
                     break
                     
                 frame_count += 1
+                
+                # Trackframe processing frequency
+                current_frame_time = time.perf_counter()
+                frame_times.append(current_frame_time - last_frame_time)
+                last_frame_time = current_frame_time
+                
                 # Process frame
                 results = analyzer.process_frame(frame)
                 
-                # Write the cropped frame to video
+                # Write the cropped frame to video if available
                 cropped_frame = analyzer.get_last_cropped_frame()
                 if cropped_frame is not None:
                     video_handler.write_frame(cropped_frame)
                 
                 # Put latest wingbeat amplitude in queue (non-blocking)
                 try:
-                    self.output_queue.put_nowait(results['delta_angle'])
-                    if frame_count % 30 == 0:
+                    self.output_queue.put_nowait({
+                        'left_angle': results['left_angle'],
+                        'right_angle': results['right_angle'],
+                        'delta_angle': results['delta_angle'],
+                        'frame': frame_count
+                    })
+                    if frame_count % 30 == 0:  # Log every 30 frames
                         self.logger.info(f"Frame {frame_count}: delta_angle = {results['delta_angle']:.2f}")
                 except Full:
                     try:
                         self.output_queue.get_nowait()
-                        self.output_queue.put_nowait(results['delta_angle'])
+                        self.output_queue.put_nowait({
+                            'left_angle': results['left_angle'],
+                            'right_angle': results['right_angle'],
+                            'delta_angle': results['delta_angle'],
+                            'frame': frame_count
+                        })
                     except Empty:
                         pass
                         
-        finally:
+            # Calculate and log frequency
+            if frame_times:
+                frame_freq = 1.0 / np.mean(frame_times)
+                self.logger.info(f"Average frame processing frequency: {frame_freq:.2f} Hz")
+                
             self.logger.info(f"Processed {frame_count} frames")
+            
+        except Exception as e:
+            self.logger.error(f"Error during analysis: {str(e)}")
+            self.ready_queue.put(False)
+        finally:
             cap.release()
             if 'video_handler' in locals():
                 video_handler.release()

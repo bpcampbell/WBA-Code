@@ -19,10 +19,7 @@ logger = logging.getLogger(__name__)
 class WingbeatAnalyzer:
     def __init__(self, config):
         self.config = config
-        self.points = {'x0': None, 'y0': None, 'x1': None, 'y1': None,
-                      'x2': None, 'y2': None, 'x3': None, 'y3': None,
-                      'x4': None, 'y4': None}
-        self.click_count = 0
+        self.points = None  # Will be set externally
         self.setup_masks()
         self.setup_points()
         self.last_cropped_frame = None
@@ -44,6 +41,9 @@ class WingbeatAnalyzer:
         
     def initialize_processing(self, frame):
         """Initialize processing parameters from first frame"""
+        if self.points is None:
+            raise ValueError("Points must be set before initialization")
+            
         central_point = (self.points['x0'], self.points['y0'])
         head_point = (self.points['x1'], self.points['y1'])
         wing_point = (self.points['x2'], self.points['y2'])
@@ -230,16 +230,6 @@ class WingbeatAnalyzer:
     def get_last_cropped_frame(self):
         """Return the last cropped frame"""
         return self.last_cropped_frame
-
-    def setup_points_ui(self, frames):
-        """Setup UI for point selection"""
-        selector = PointSelector(frames)
-        points = selector.get_points()
-        if points is None:
-            return False
-        self.points = points
-        self.initialize_processing(frames[0])
-        return True
 
 def process_wing_region(roi, hinge_point, is_right_wing=False, mask_offset=0):
     """Process wing region to calculate angle and area."""
