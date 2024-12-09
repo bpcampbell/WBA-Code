@@ -187,8 +187,21 @@ class WingbeatAnalyzer:
         left_angle, left_min_point, left_area = left_data
         right_angle, right_min_point, right_area = right_data
         
-        if left_angle < self.config['wingbeat']['min_angle_threshold'] or \
-           right_angle < self.config['wingbeat']['min_angle_threshold']:
+        # Validate angles
+        min_angle = self.config['wingbeat']['min_angle_threshold']
+        max_angle = self.config['wingbeat'].get('max_angle_threshold', 180)
+        
+        # Force angles to 0 if they're invalid
+        if not (min_angle <= left_angle <= max_angle):
+            left_angle = 0
+            left_min_point = self.left_point_new
+        
+        if not (min_angle <= right_angle <= max_angle):
+            right_angle = 0
+            right_min_point = self.right_point_new
+        
+        # Calculate delta only if both angles are valid
+        if left_angle == 0 or right_angle == 0:
             delta_angle_rl = 0
         else:
             delta_angle_rl = right_angle - left_angle
@@ -259,6 +272,8 @@ def process_wing_region(roi, hinge_point, is_right_wing=False, mask_offset=0):
     
     # Find contours in processed mask
     contours, _ = cv2.findContours(wing_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Early return if no contours found
     if not contours:
         return 0, hinge_point, 0
     
@@ -268,7 +283,7 @@ def process_wing_region(roi, hinge_point, is_right_wing=False, mask_offset=0):
     max_contour = contours[max_idx]
     max_area = areas[max_idx]
     
-    # Check if contour area is too small
+    # Early return if contour area is too small
     if max_area < CONFIG['wingbeat']['min_contour_area']:
         return 0, hinge_point, 0
     
@@ -283,23 +298,28 @@ def process_wing_region(roi, hinge_point, is_right_wing=False, mask_offset=0):
             x_coord = point[0] + mask_offset if is_right_wing else point[0]
             wing_tip = (x_coord, point[1])
             
+    # Early return if no wing tip found
     if wing_tip is None:
         return 0, hinge_point, 0
     
     # Calculate angle
+    delta_x = wing_tip[0] - hinge_point[0]
+    delta_y = hinge_point[1] - wing_tip[1]
+    
+    # Check if the detected point is too close to hinge
+    min_distance = CONFIG['wingbeat'].get('min_wing_length', 10)  # Add this to config if not present
+    if (delta_x**2 + delta_y**2) < min_distance**2:
+        return 0, hinge_point, 0
+        
     if is_right_wing:
-        delta = np.array([
-            wing_tip[0] - hinge_point[0],
-            hinge_point[1] - wing_tip[1]
-        ])
+        angle = 180 - np.degrees(np.arctan2(delta_x, delta_y))
     else:
-        delta = np.array([
-            hinge_point[0] - wing_tip[0],
-            hinge_point[1] - wing_tip[1]
-        ])
+        angle = 180 - np.degrees(np.arctan2(-delta_x, delta_y))
     
-    angle = 180 - np.degrees(np.arctan2(delta[0], delta[1]))
-    
+    # Validate angle is in reasonable range
+    if angle < 0 or angle > 180:
+        return 0, hinge_point, 0
+        
     return angle, wing_tip, max_area
 
 

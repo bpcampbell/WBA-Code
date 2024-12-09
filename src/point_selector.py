@@ -210,7 +210,7 @@ class PointSelector:
             self.root,
             corner_radius=10,
             width=300,
-            height=400,
+            height=460,  # Increased height to accommodate new field
             fg_color="#1a1a1a"
         )
         # Position panel at right side
@@ -225,7 +225,31 @@ class PointSelector:
         panel.grid_propagate(False)
         panel.pack_propagate(False)
         
-        # Add title label
+        # Add experiment name entry
+        name_frame = ctk.CTkFrame(
+            panel,
+            fg_color="transparent"
+        )
+        name_frame.pack(pady=(15, 0), padx=20, fill="x")
+        
+        ctk.CTkLabel(
+            name_frame,
+            text="Experiment Name:",
+            font=("Helvetica", 12),
+            text_color="white"
+        ).pack(side="left", padx=(0, 10))
+        
+        self.name_entry = ctk.CTkEntry(
+            name_frame,
+            font=("Helvetica", 12),
+            width=140,
+            fg_color="black",
+            text_color="white"
+        )
+        self.name_entry.pack(side="right")
+        self.name_entry.insert(0, CONFIG['experiment']['name'])  # Set default name
+        
+        # Add title label for notes
         ctk.CTkLabel(
             panel,
             text="Experiment Notes",
@@ -604,9 +628,13 @@ class PointSelector:
 
     def save_experiment_metadata(self, timestamp):
         """Save experiment metadata and notes to JSON file"""
+        # Update config with new experiment name
+        CONFIG['experiment']['name'] = self.name_entry.get()
+        
         # Create metadata dictionary
         metadata = {
             "timestamp": timestamp,
+            "experiment_name": self.name_entry.get(),
             "notes": self.notes_text.get("1.0", "end-1c"),
             "config": CONFIG,
             "points": {
