@@ -1,9 +1,9 @@
-import logging
 from pathlib import Path
-import cv2
-import time
+import logging, cv2
+import pandas as pd
 from src.experiment_manager import ExperimentManager
 from src.config import CONFIG
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,7 +51,6 @@ def main():
         
         output_file = output_dir / f"experiment_data_{timestamp}.csv"
         
-        import pandas as pd
         df = pd.DataFrame(data, columns=[
            'time',
             'left_angle',

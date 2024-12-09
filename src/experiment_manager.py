@@ -1,17 +1,11 @@
-import cv2
-import time
-import logging
 from multiprocessing import Queue
 from queue import Empty
+import cv2, time, logging
 import numpy as np
 from src.realtime_analyzer import RealTimeWingbeatAnalyzer
 from src.optic_flow import OpticFlowGenerator
-from datetime import datetime
-from pathlib import Path
 from src.video_handler import VideoHandler
 from src.point_selector import PointSelector
-
-# import config
 from src.config import CONFIG
 
 logger = logging.getLogger(__name__)
@@ -114,7 +108,8 @@ class ExperimentManager:
         
         # Apply speed scaling and ensure it's not zero
         speed = self.speed_scale * gain * normalized_amplitude
-        return max(speed, 0.1)  # Ensure minimum movement speed
+        
+        return speed 
         
     def run_experiment(self, experiment_name, gain_cycle):
         """Run experiment with given gain cycle."""

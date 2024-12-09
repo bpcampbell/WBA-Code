@@ -1,8 +1,6 @@
-import csv
-from pathlib import Path
-import logging
-from datetime import datetime
 from time import perf_counter_ns
+from pathlib import Path
+import csv, logging
 
 logger = logging.getLogger(__name__)
 

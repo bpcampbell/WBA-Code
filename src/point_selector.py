@@ -1,9 +1,7 @@
 import customtkinter as ctk
 from PIL import Image, ImageTk
-import numpy as np
-import logging
+import logging, json
 import tkinter as tk
-import json
 from datetime import datetime
 from pathlib import Path
 from src.config import CONFIG

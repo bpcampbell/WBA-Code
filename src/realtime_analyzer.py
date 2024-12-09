@@ -1,13 +1,11 @@
+from src.wingbeat_analyser import WingbeatAnalyzer
+from src.video_handler import VideoHandler
 from multiprocessing import Process, Queue
 from queue import Full, Empty
-import cv2
-from src.wingbeat_analyser import WingbeatAnalyzer
+import cv2, logging, time
 from src.config import CONFIG
-import logging
-import time
 from datetime import datetime
 from pathlib import Path
-from src.video_handler import VideoHandler
 import numpy as np
 
 class RealTimeWingbeatAnalyzer(Process):

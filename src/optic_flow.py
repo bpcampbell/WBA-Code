@@ -1,4 +1,3 @@
-import cv2
 import numpy as np
 from src.config import CONFIG
 
