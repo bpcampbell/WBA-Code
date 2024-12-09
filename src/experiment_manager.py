@@ -96,7 +96,6 @@ class ExperimentManager:
         
     def map_wingbeat_to_speed(self, wingbeat_amplitude, gain):
         """Maps wingbeat amplitude to speed using gain."""
-        # Take absolute value of wingbeat amplitude since negative values shouldn't affect direction
         wingbeat_amplitude = abs(wingbeat_amplitude)
         
         # Clamp to valid range
@@ -158,7 +157,8 @@ class ExperimentManager:
                     
                     if wingbeat_data is not None:
                         delta_time = current_time - last_time
-                        speed = self.map_wingbeat_to_speed(wingbeat_data['delta_angle'], current_gain)
+                        average_wingbeat_amplitude = 0.5*(wingbeat_data['left_angle'] + wingbeat_data['right_angle'])
+                        speed = self.map_wingbeat_to_speed(average_wingbeat_amplitude, current_gain)
                         self.cumulative_phase -= speed * delta_time
                         
                         # Create data point

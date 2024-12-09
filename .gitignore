@@ -28,3 +28,7 @@ src/__pycache__/optic_flow.cpython-38.pyc
 src/__pycache__/realtime_analyzer.cpython-38.pyc
 src/__pycache__/video_handler.cpython-38.pyc
 src/__pycache__/wingbeat_analyser.cpython-38.pyc
+Analysis/plot_most_recent.m
+Analysis/run_latest_experiment.m
+src/__pycache__/config.cpython-38.pyc
+src/__pycache__/wingbeat_analyser.cpython-38.pyc
