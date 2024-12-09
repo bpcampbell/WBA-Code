@@ -20,3 +20,11 @@ __pycache__/
 */*/__pycache__/
 **/__pycache__/
 Analysis/analyse_individual_experiment.m
+src/__pycache__/__init__.cpython-38.pyc
+src/__pycache__/config.cpython-38.pyc
+src/__pycache__/data_manager.cpython-38.pyc
+src/__pycache__/experiment_manager.cpython-38.pyc
+src/__pycache__/optic_flow.cpython-38.pyc
+src/__pycache__/realtime_analyzer.cpython-38.pyc
+src/__pycache__/video_handler.cpython-38.pyc
+src/__pycache__/wingbeat_analyser.cpython-38.pyc
