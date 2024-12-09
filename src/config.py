@@ -1,14 +1,14 @@
 CONFIG = {
     # Experiment settings
     'experiment': {
-        'name': 'realtime_test',
+        'name': 'exp1',
         'frame_size': (800, 800),
         'gain_cycle': [
             {'duration': 10, 'gain': 50},  # Higher gain for more noticeable movement
             {'duration': 10, 'gain': 0},   # No stimulus
         ],
-        'min_amplitude': 0,
-        'max_amplitude': 180
+        'min_amplitude': 50,
+        'max_amplitude': 170
     },
     
     # Wingbeat analyzer settings
@@ -21,7 +21,7 @@ CONFIG = {
         # Detection thresholds
         'min_contour_area': 800,        # Minimum wing area (filters legs)
         'min_angle_threshold': 50,       # Minimum valid wing beat angle
-        'max_angle_threshold': 180,      # Maximum valid wing beat angle
+        'max_angle_threshold': 170,      # Maximum valid wing beat angle
         'min_wing_length': 20,          # Minimum wing length
         
         # Visualization

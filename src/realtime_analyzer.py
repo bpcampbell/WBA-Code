@@ -84,7 +84,8 @@ class RealTimeWingbeatAnalyzer(Process):
                         'frame': frame_count
                     })
                     if frame_count % 30 == 0:  # Log every 30 frames
-                        self.logger.info(f"Frame {frame_count}: delta_angle = {results['delta_angle']:.2f}")
+                        average_wingbeat_amplitude = 0.5*(results['left_angle'] + results['right_angle'])
+                        self.logger.info(f"Frame {frame_count}: average_wingbeat_amplitude = {average_wingbeat_amplitude:.2f}")
                 except Full:
                     try:
                         self.output_queue.get_nowait()
